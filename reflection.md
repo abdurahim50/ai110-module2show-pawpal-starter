@@ -42,13 +42,23 @@ Two changes surfaced during implementation:
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+The scheduler considers three constraints: the owner's total available minutes
+for the day, each task's priority (high/medium/low), and each task's fixed time
+of day (for appointments that can't move). Priority mattered most — when time
+runs short, `build_plan()` packs high-priority tasks first and simply skips the
+lowest-priority ones, because a busy owner would rather guarantee the walk and
+meds happen than fit in an optional play session.
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+`find_time_conflicts()` only flags tasks that share the **exact same** HH:MM
+start time — it does not check whether two tasks with different start times
+overlap because of their durations (e.g., a 30-minute task at 08:00 running
+into a task at 08:15). I chose exact-match because it is simple, fast, and
+returns a clear warning string without crashing, which is enough to alert the
+owner to the most common clash. The heavier duration-overlap check lives
+separately in `detect_conflicts()`, which runs against a fully built plan; I
+kept the two apart so the lightweight per-task check stays cheap and readable.
 
 ---
 

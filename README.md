@@ -48,17 +48,27 @@ Running the CLI demo (`python main.py`) produces:
 
 ```
 (.venv) yongh@cyberOps:~/code/codepath/ai110-module2show-pawpal-starter$ python main.py
-Today's Schedule for Jordan
-========================================
-08:00-08:10  Feeding            [high]
-08:10-08:40  Morning walk       [high]
-14:00-14:30  Vet appointment    [high]
-14:30-14:50  Enrichment play    [medium]
-========================================
+Today's Schedule for Jordan (sorted by time)
+============================================
+08:00  Morning walk       [high]
+08:00  Feeding            [high]
+12:00  Enrichment play    [medium]
+18:00  Evening walk       [medium]
+============================================
+
+Pending tasks: 4
+Biscuit's tasks: ['Evening walk', 'Morning walk']
+
+Conflict check:
+  ⚠ Conflict at 08:00: Morning walk, Feeding
+
+Completing Biscuit's 'Morning walk' (daily)...
+  done=True; next occurrence due 2026-07-06
 ```
 
-High-priority tasks are packed from the owner's wake time, while the vet
-appointment stays anchored at its fixed 14:00 slot.
+The demo adds tasks out of order to show `sort_by_time()`, filters by status
+and pet, flags the 08:00 clash, and shows a completed daily task spawning its
+next occurrence.
 
 ## 🧪 Testing PawPal+
 
@@ -79,14 +89,12 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_by_time()`, `Scheduler.sort_tasks()` | `sort_by_time` orders by HH:MM (untimed last); `sort_tasks` orders by priority then duration for plan packing. |
+| Filtering | `Scheduler.filter_by_status()`, `Scheduler.filter_by_pet()` | Filter tasks by completion status, or narrow to a single pet's tasks. |
+| Conflict handling | `Scheduler.find_time_conflicts()`, `Scheduler.detect_conflicts()` | `find_time_conflicts` returns warning strings for exact same-time tasks; `detect_conflicts` finds duration overlaps in a built plan. |
+| Recurring tasks | `Task.next_occurrence()`, `Pet.complete_task()` | Completing a `daily`/`weekly` task auto-creates the next instance with `due_date` advanced via `timedelta`. |
 
 ## 📸 Demo Walkthrough
 

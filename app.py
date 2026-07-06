@@ -64,7 +64,7 @@ if owner.pets:
         with f1:
             recurrence = st.selectbox("Recurrence", ["none", "daily", "weekly"])
         with f2:
-            fixed_time = st.text_input("Fixed time (HH:MM, optional)", value="")
+            time_of_day = st.text_input("Time (HH:MM, optional)", value="")
         if st.form_submit_button("Add task") and title.strip():
             pet = owner.get_pet(target)
             if pet is not None:
@@ -75,7 +75,7 @@ if owner.pets:
                         duration_minutes=int(duration),
                         priority=priority,
                         recurrence=recurrence,
-                        fixed_time=fixed_time.strip() or None,
+                        time=time_of_day.strip() or None,
                     )
                 )
 
@@ -90,7 +90,7 @@ for pet in owner.pets:
                         "Category": t.category,
                         "Duration (min)": t.duration_minutes,
                         "Priority": t.priority,
-                        "Fixed time": t.fixed_time or "—",
+                        "Time": t.time or "—",
                         "Done": "✓" if t.done else "",
                     }
                     for t in pet.tasks

@@ -1,12 +1,14 @@
 """PawPal+ backend logic layer.
 
 Core domain classes (Owner, Pet, Task) and the Scheduler that turns a set
-of tasks into an ordered daily plan.
+of tasks into an ordered daily plan, plus algorithmic helpers for sorting,
+filtering, recurring tasks, and conflict detection.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import date, timedelta
 
 PRIORITY_RANK = {"high": 3, "medium": 2, "low": 1}
 
@@ -31,7 +33,8 @@ class Task:
     duration_minutes: int = 15
     priority: str = "medium"
     recurrence: str = "none"        # none | daily | weekly
-    fixed_time: str | None = None   # "HH:MM" for appointments, else None
+    time: str | None = None         # "HH:MM" time of day, or None if flexible
+    due_date: date | None = None    # calendar date this instance is due
     done: bool = False
 
     def priority_score(self) -> int:
@@ -41,6 +44,14 @@ class Task:
     def mark_complete(self) -> None:
         """Mark this task as done."""
         self.done = True
+
+    def next_occurrence(self) -> "Task | None":
+        """Return the next recurring instance of this task, or None if one-off."""
+        step = {"daily": timedelta(days=1), "weekly": timedelta(days=7)}.get(self.recurrence)
+        if step is None:
+            return None
+        base = self.due_date or date.today()
+        return replace(self, due_date=base + step, done=False)
 
 
 @dataclass
@@ -60,6 +71,14 @@ class Pet:
     def remove_task(self, title: str) -> None:
         """Remove every task with the given title from this pet."""
         self.tasks = [t for t in self.tasks if t.title != title]
+
+    def complete_task(self, task: Task) -> "Task | None":
+        """Mark a task done; if it recurs, add and return its next occurrence."""
+        task.mark_complete()
+        nxt = task.next_occurrence()
+        if nxt is not None:
+            self.add_task(nxt)
+        return nxt
 
 
 @dataclass
@@ -102,6 +121,31 @@ class Scheduler:
             key=lambda t: (-t.priority_score(), t.duration_minutes, t.title),
         )
 
+    def sort_by_time(self, tasks: list[Task]) -> list[Task]:
+        """Return tasks ordered by their HH:MM time (untimed tasks last)."""
+        return sorted(tasks, key=lambda t: t.time or "99:99")
+
+    def filter_by_status(self, tasks: list[Task], done: bool = False) -> list[Task]:
+        """Return only tasks matching the given completion status."""
+        return [t for t in tasks if t.done == done]
+
+    def filter_by_pet(self, owner: Owner, pet_name: str) -> list[Task]:
+        """Return the tasks belonging to a single named pet."""
+        pet = owner.get_pet(pet_name)
+        return list(pet.tasks) if pet else []
+
+    def find_time_conflicts(self, tasks: list[Task]) -> list[str]:
+        """Return warning strings for tasks sharing the exact same HH:MM time."""
+        by_time: dict[str, list[str]] = {}
+        for t in tasks:
+            if t.time:
+                by_time.setdefault(t.time, []).append(t.title)
+        return [
+            f"⚠ Conflict at {time}: {', '.join(titles)}"
+            for time, titles in sorted(by_time.items())
+            if len(titles) > 1
+        ]
+
     def build_plan(self, tasks: list[Task]) -> list[dict]:
         """Pack unfinished tasks into the day, honoring fixed times and budget."""
         ordered = self.sort_tasks([t for t in tasks if not t.done])
@@ -111,7 +155,7 @@ class Scheduler:
         for task in ordered:
             if used + task.duration_minutes > self.available_minutes:
                 continue  # out of time — skip this (lower-priority) task
-            start = _to_minutes(task.fixed_time) if task.fixed_time else cursor
+            start = _to_minutes(task.time) if task.time else cursor
             end = start + task.duration_minutes
             plan.append(
                 {
@@ -128,7 +172,7 @@ class Scheduler:
         return plan
 
     def detect_conflicts(self, plan: list[dict]) -> list[dict]:
-        """Return pairs of plan entries whose time slots overlap."""
+        """Return pairs of plan entries whose time slots overlap in duration."""
         conflicts: list[dict] = []
         ordered = sorted(plan, key=lambda entry: entry["start_min"])
         for first, second in zip(ordered, ordered[1:]):
