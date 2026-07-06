@@ -44,15 +44,21 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Running the CLI demo (`python main.py`) produces:
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+(.venv) yongh@cyberOps:~/code/codepath/ai110-module2show-pawpal-starter$ python main.py
+Today's Schedule for Jordan
+========================================
+08:00-08:10  Feeding            [high]
+08:10-08:40  Morning walk       [high]
+14:00-14:30  Vet appointment    [high]
+14:30-14:50  Enrichment play    [medium]
+========================================
 ```
+
+High-priority tasks are packed from the owner's wake time, while the vet
+appointment stays anchored at its fixed 14:00 slot.
 
 ## 🧪 Testing PawPal+
 
@@ -67,7 +73,8 @@ pytest --cov
 Sample test output:
 
 ```
-# Paste your pytest output here
+...                                                                      [100%]
+3 passed in 0.01s
 ```
 
 ## 📐 Smarter Scheduling

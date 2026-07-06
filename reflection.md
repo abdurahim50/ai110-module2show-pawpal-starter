@@ -25,8 +25,16 @@ scheduling logic can evolve without changing the domain model.
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+Two changes surfaced during implementation:
+
+1. **Added `done` + `mark_complete()` to `Task`.** The original skeleton had no
+   completion state, but a daily planner needs to drop finished tasks from the
+   schedule, so I added a boolean status and a method to flip it.
+2. **Added `Scheduler.plan_for_owner(owner)`.** Originally the Scheduler only
+   took a raw list of tasks. It felt cleaner for the Scheduler to pull tasks
+   straight from the Owner (via `owner.all_tasks()`), so I added a convenience
+   method. This makes the Owner the single source of truth for "what needs
+   doing" and keeps the CLI/UI callers simple.
 
 ---
 
