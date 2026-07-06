@@ -4,8 +4,24 @@
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+Three core actions the app supports: (1) add a pet to the owner's profile,
+(2) add care tasks (walks, feeding, meds, appointments) to a pet with a
+duration and priority, and (3) generate and view today's ordered plan with a
+short explanation.
+
+I designed four classes:
+
+- **Task** (dataclass) — what a care activity is: title, category, duration,
+  priority, recurrence, and an optional fixed time for appointments.
+- **Pet** (dataclass) — owns a list of its Tasks and can add/remove them.
+- **Owner** (dataclass) — holds one or more Pets plus scheduling preferences
+  (available minutes per day, wake time) and can aggregate every pet's tasks.
+- **Scheduler** (behavior class, not a data record) — the algorithms: sorting
+  tasks by priority, packing them into the available time, detecting time
+  conflicts, and explaining the resulting plan.
+
+I split data (Task/Pet/Owner as dataclasses) from behavior (Scheduler) so the
+scheduling logic can evolve without changing the domain model.
 
 **b. Design changes**
 

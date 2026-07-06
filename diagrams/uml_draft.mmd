@@ -1,0 +1,45 @@
+classDiagram
+    %% PawPal+ working design (Phase 1). Update in Phase 6 to match final code.
+
+    class Owner {
+        +str name
+        +list~Pet~ pets
+        +int available_minutes
+        +str wake_time
+        +add_pet(pet Pet) None
+        +get_pet(name str) Pet
+        +all_tasks() list~Task~
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +str breed
+        +int age
+        +list~Task~ tasks
+        +add_task(task Task) None
+        +remove_task(title str) None
+    }
+
+    class Task {
+        +str title
+        +str category
+        +int duration_minutes
+        +str priority
+        +str recurrence
+        +str fixed_time
+        +priority_score() int
+    }
+
+    class Scheduler {
+        +str day_start
+        +int available_minutes
+        +sort_tasks(tasks list~Task~) list~Task~
+        +build_plan(tasks list~Task~) list
+        +detect_conflicts(plan list) list
+        +explain(plan list) str
+    }
+
+    Owner "1" --> "*" Pet : owns
+    Pet "1" --> "*" Task : has
+    Scheduler ..> Task : schedules
