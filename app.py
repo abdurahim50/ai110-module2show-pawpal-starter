@@ -4,13 +4,13 @@ from pawpal_system import Owner, Pet, Task, Scheduler
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 st.title("🐾 PawPal+")
+st.caption("A smart pet-care planner: add pets, add tasks, and generate a prioritized daily schedule.")
 
 # --- Application memory -----------------------------------------------------
 # Streamlit reruns top-to-bottom on every interaction, so we keep the Owner
 # (with its pets and tasks) in session_state instead of rebuilding it.
 if "owner" not in st.session_state:
     st.session_state.owner = Owner(name="Jordan")
-
 owner: Owner = st.session_state.owner
 
 # --- Owner + preferences ----------------------------------------------------
@@ -40,6 +40,7 @@ with st.form("add_pet", clear_on_submit=True):
         age = st.number_input("Age", min_value=0, max_value=40, value=1)
     if st.form_submit_button("Add pet") and pet_name.strip():
         owner.add_pet(Pet(name=pet_name.strip(), species=species, breed=breed, age=int(age)))
+        st.success(f"Added {pet_name.strip()}.")
 
 if not owner.pets:
     st.info("No pets yet. Add one above.")
@@ -78,26 +79,24 @@ if owner.pets:
                         time=time_of_day.strip() or None,
                     )
                 )
+                st.success(f"Added '{title.strip()}' for {target}.")
 
-# --- Current pets & tasks ---------------------------------------------------
+# --- Current pets & tasks (with mark-complete) ------------------------------
 for pet in owner.pets:
     with st.expander(f"{pet.name} ({pet.species}) — {len(pet.tasks)} task(s)", expanded=True):
-        if pet.tasks:
-            st.table(
-                [
-                    {
-                        "Task": t.title,
-                        "Category": t.category,
-                        "Duration (min)": t.duration_minutes,
-                        "Priority": t.priority,
-                        "Time": t.time or "—",
-                        "Done": "✓" if t.done else "",
-                    }
-                    for t in pet.tasks
-                ]
-            )
-        else:
+        if not pet.tasks:
             st.caption("No tasks for this pet yet.")
+        # Iterate a snapshot: complete_task() may append a new occurrence.
+        for i, task in enumerate(list(pet.tasks)):
+            r1, r2, r3, r4 = st.columns([3, 2, 2, 2])
+            r1.write(f"**{task.title}**  \n_{task.category}_")
+            r2.write(task.time or "—")
+            r3.write(task.priority)
+            if task.done:
+                r4.write("✓ done")
+            elif r4.button("Mark done", key=f"done_{pet.name}_{i}"):
+                pet.complete_task(task)  # spawns next occurrence if recurring
+                st.rerun()
 
 st.divider()
 
@@ -105,10 +104,20 @@ st.divider()
 st.subheader("Build Schedule")
 if st.button("Generate schedule"):
     scheduler = Scheduler(day_start=owner.wake_time, available_minutes=owner.available_minutes)
-    plan = scheduler.plan_for_owner(owner)
-    if not plan:
-        st.warning("No tasks to schedule. Add some tasks first.")
+    tasks = owner.all_tasks()
+    plan = scheduler.build_plan(tasks)
+
+    conflicts = scheduler.find_time_conflicts(tasks)
+    if conflicts:
+        for warning in conflicts:
+            st.warning(warning)
     else:
+        st.success("No time conflicts detected.")
+
+    if not plan:
+        st.info("No tasks to schedule. Add some tasks first.")
+    else:
+        st.success(f"Planned {len(plan)} task(s) for {owner.name}.")
         st.table(
             [
                 {
@@ -120,9 +129,22 @@ if st.button("Generate schedule"):
                 for e in plan
             ]
         )
-        st.text(scheduler.explain(plan))
-        conflicts = scheduler.detect_conflicts(plan)
-        for c in conflicts:
-            st.warning(
-                f"⚠ {c['first']} overlaps {c['second']} by {c['overlap_minutes']} min"
-            )
+        with st.expander("Why this plan?"):
+            st.text(scheduler.explain(plan))
+
+st.divider()
+
+# --- Find the next free slot for a flexible task ----------------------------
+st.subheader("Find a free slot")
+st.caption("Where could a new, flexible task fit around today's fixed appointments?")
+slot_duration = st.number_input(
+    "New task duration (min)", min_value=1, max_value=240, value=45, step=5
+)
+if st.button("Find next free slot"):
+    scheduler = Scheduler(day_start=owner.wake_time, available_minutes=owner.available_minutes)
+    plan = scheduler.build_plan(owner.all_tasks())
+    slot = scheduler.find_next_slot(plan, int(slot_duration))
+    if slot:
+        st.success(f"Earliest opening for a {int(slot_duration)}-min task: **{slot}**")
+    else:
+        st.warning("No free slot that long remains in today's available time.")

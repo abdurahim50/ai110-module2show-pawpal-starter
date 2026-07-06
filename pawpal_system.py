@@ -171,6 +171,26 @@ class Scheduler:
         plan.sort(key=lambda entry: entry["start_min"])
         return plan
 
+    def find_next_slot(self, plan: list[dict], duration_minutes: int) -> str | None:
+        """Return the earliest 'HH:MM' start where a task of the given length fits.
+
+        Scans the day window [day_start, day_start + available_minutes) for the
+        first free gap long enough to hold ``duration_minutes`` without
+        overlapping any already-placed entry in ``plan``. Returns None when no
+        gap that large remains in the day.
+        """
+        day_open = _to_minutes(self.day_start)
+        day_close = day_open + self.available_minutes
+        busy = sorted((e["start_min"], e["end_min"]) for e in plan)
+        cursor = day_open
+        for start, end in busy:
+            if start - cursor >= duration_minutes:
+                return _to_hhmm(cursor)   # gap before this entry is big enough
+            cursor = max(cursor, end)
+        if day_close - cursor >= duration_minutes:
+            return _to_hhmm(cursor)       # room left after the last entry
+        return None
+
     def detect_conflicts(self, plan: list[dict]) -> list[dict]:
         """Return pairs of plan entries whose time slots overlap in duration."""
         conflicts: list[dict] = []

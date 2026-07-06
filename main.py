@@ -32,6 +32,11 @@ def main() -> None:
     conflicts = scheduler.find_time_conflicts(tasks)
     print("\n".join(f"  {w}" for w in conflicts) if conflicts else "  No conflicts.")
 
+    print("\nNext free slot for a 45-min grooming session:")
+    plan = scheduler.build_plan(tasks)
+    slot = scheduler.find_next_slot(plan, 45)
+    print(f"  earliest opening: {slot}" if slot else "  no room left today.")
+
     print("\nCompleting Biscuit's 'Morning walk' (daily)...")
     morning = next(t for t in biscuit.tasks if t.title == "Morning walk")
     nxt = biscuit.complete_task(morning)

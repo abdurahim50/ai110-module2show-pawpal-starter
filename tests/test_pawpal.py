@@ -96,6 +96,31 @@ def test_find_time_conflicts_none_when_times_unique():
     assert scheduler.find_time_conflicts(tasks) == []
 
 
+# --- Next available slot ----------------------------------------------------
+def test_next_slot_is_day_start_when_plan_empty():
+    scheduler = Scheduler(day_start="08:00", available_minutes=240)
+    assert scheduler.find_next_slot([], 30) == "08:00"
+
+
+def test_next_slot_finds_gap_between_fixed_tasks():
+    scheduler = Scheduler(day_start="08:00", available_minutes=600)
+    # Fixed appointments at 08:00-08:30 and 10:00-10:30 leave a wide gap after 08:30.
+    plan = scheduler.build_plan(
+        [
+            Task("Walk", duration_minutes=30, priority="high", time="08:00"),
+            Task("Vet", duration_minutes=30, priority="high", time="10:00"),
+        ]
+    )
+    # A 30-minute task fits starting at 08:30, right after the first appointment.
+    assert scheduler.find_next_slot(plan, 30) == "08:30"
+
+
+def test_next_slot_returns_none_when_day_is_full():
+    scheduler = Scheduler(day_start="08:00", available_minutes=30)
+    plan = scheduler.build_plan([Task("Walk", duration_minutes=30, priority="high", time="08:00")])
+    assert scheduler.find_next_slot(plan, 30) is None
+
+
 # --- Edge case: no tasks ----------------------------------------------------
 def test_plan_for_owner_with_no_tasks_is_empty():
     owner = Owner("Jordan")

@@ -66,13 +66,55 @@ kept the two apart so the lightweight per-task check stays cheap and readable.
 
 **a. How you used AI**
 
-- How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
-- What kinds of prompts or questions were most helpful?
+I used AI across every phase but in different modes:
+
+- **Design brainstorming** — I described the scenario and asked the assistant to
+  help pressure-test my four-class split (Task/Pet/Owner/Scheduler). The most
+  useful prompts were constraint-first ones like *"which of these belong on the
+  data classes vs. the Scheduler?"* rather than *"write the app for me."*
+- **Refactoring** — after the logic worked, I asked for help tightening method
+  names and docstrings so the UML and the code would stay in sync.
+- **Debugging** — the assistant helped me reason about the Streamlit rerun model,
+  which is why the Owner lives in `st.session_state` and the mark-done loop
+  iterates over a `list(pet.tasks)` snapshot (completing a recurring task appends
+  a new occurrence mid-iteration).
+
+The most helpful prompts were specific and included the actual file, e.g.
+*"here is `pawpal_system.py` — does the UML still match, and what's missing?"*
+Vague prompts produced generic code; grounded prompts produced targeted edits.
 
 **b. Judgment and verification**
 
-- Describe one moment where you did not accept an AI suggestion as-is.
-- How did you evaluate or verify what the AI suggested?
+- **A suggestion I modified to keep the design clean:** the assistant proposed
+  folding all conflict logic into one method that checked both same-time clashes
+  and duration overlaps. I split it back into `find_time_conflicts()` (cheap,
+  exact `HH:MM` match, returns owner-friendly warning strings) and
+  `detect_conflicts()` (heavier overlap check against a fully built plan). Keeping
+  them apart matched how the UI actually uses them — a quick warning before
+  scheduling vs. a post-plan sanity check — and kept each method small.
+- **How I verified suggestions:** I treated AI output as a draft, not an answer. I
+  ran `python main.py` to eyeball behavior, kept the pytest suite (11 tests)
+  green after each change, and checked that any new method appeared in both the
+  code and `diagrams/uml_final.mmd`. When a suggestion didn't map to a test or a
+  concrete UI action, I dropped it.
+
+**c. AI strategy: features and session hygiene**
+
+- **Most effective features:** attaching the actual source file to a prompt (so
+  feedback was grounded in my real code, not a hallucinated version) and asking
+  the assistant to explain *why* before generating code, which let me catch
+  design mismatches early. Inline refactor/rename help was the biggest time-saver
+  for the Scheduler.
+- **Separate sessions per phase:** I kept design, implementation, testing, and
+  documentation in separate chats. Each session started clean with only the
+  context that phase needed, so the assistant didn't drag stale assumptions
+  forward, and I could revisit a phase's reasoning later without scrolling past
+  unrelated code.
+- **Being the lead architect:** the AI was fast at producing options, but it had
+  no opinion about *my* constraints — that a busy owner would rather guarantee
+  the walk than fit an optional play session, or that the data/behavior split
+  matters. Every accept/reject decision, the class boundaries, and the tradeoffs
+  were mine; the AI accelerated the typing, not the judgment.
 
 ---
 
@@ -80,13 +122,31 @@ kept the two apart so the lightweight per-task check stays cheap and readable.
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+The suite (`tests/test_pawpal.py`, 14 tests) covers the behaviors that would
+silently corrupt a daily plan if they broke:
+
+- **Sorting** — `sort_by_time()` returns chronological order and `build_plan()`
+  places high-priority tasks first.
+- **Filtering** — by completion status and by pet name.
+- **Recurrence** — completing a `daily` task creates the next day's instance; a
+  one-off task creates nothing.
+- **Conflict detection** — duplicate times are flagged, unique times are not.
+- **Next available slot** — `find_next_slot()` returns the day start for an empty
+  plan, finds the gap between fixed appointments, and returns `None` on a full day.
+- **Core + edge case** — marking a task complete, and an owner/pet with no tasks
+  yielding an empty plan.
+
+These matter because sorting, recurrence, and conflict flagging are the whole
+value of the app — a wrong sort or a missing recurrence is worse than an obvious
+crash because the owner wouldn't notice.
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+Confidence: **★★★★☆ (4/5)**. Every core behavior and the main edge cases pass.
+With more time I'd next test **duration overlaps** (a 30-min task at 08:00
+running into an 08:15 task, which `find_time_conflicts()` intentionally ignores)
+and **invalid input** — a malformed `HH:MM` string currently reaches
+`_to_minutes()` and would raise.
 
 ---
 
@@ -94,12 +154,24 @@ kept the two apart so the lightweight per-task check stays cheap and readable.
 
 **a. What went well**
 
-- What part of this project are you most satisfied with?
+I'm most satisfied with the clean split between the data classes and the
+`Scheduler`. Because scheduling lives in one place, I could evolve the algorithm
+(add packing, conflict checks, an `explain()` rationale) without touching the
+domain model, and the same logic layer powers both the CLI (`main.py`) and the
+Streamlit UI unchanged.
 
 **b. What you would improve**
 
-- If you had another iteration, what would you improve or redesign?
+I'd replace `HH:MM` strings with real `datetime`/`time` objects to remove the
+brittle `_to_minutes()`/`_to_hhmm()` conversions and get input validation for
+free, and I'd unify the two conflict methods behind one interval-overlap check so
+the UI can warn about duration clashes, not just exact-time collisions.
 
 **c. Key takeaway**
 
-- What is one important thing you learned about designing systems or working with AI on this project?
+The most important lesson is that the leverage in AI-assisted engineering is
+still *system design and judgment*. The AI produced working code quickly, but the
+decisions that made the project coherent — the class boundaries, the
+data/behavior split, choosing to guarantee high-priority tasks over fitting
+everything in — were mine to own and to verify against tests. I stayed the
+architect; the AI was a very fast pair of hands.
