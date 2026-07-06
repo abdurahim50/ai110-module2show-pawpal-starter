@@ -121,6 +121,55 @@ def test_next_slot_returns_none_when_day_is_full():
     assert scheduler.find_next_slot(plan, 30) is None
 
 
+# --- Time-blocking (advanced scheduling) ------------------------------------
+def test_flexible_task_is_blocked_around_fixed_appointment():
+    scheduler = Scheduler(day_start="08:00", available_minutes=240)
+    plan = scheduler.build_plan(
+        [
+            Task("Vet", duration_minutes=60, priority="high", time="08:00"),  # fixed
+            Task("Play", duration_minutes=30, priority="medium"),             # flexible
+        ]
+    )
+    starts = {e["task"].title: e["start"] for e in plan}
+    assert starts["Vet"] == "08:00"
+    assert starts["Play"] == "09:00"   # placed after the appointment, no overlap
+
+
+def test_time_blocked_plan_has_no_overlaps():
+    scheduler = Scheduler(day_start="08:00", available_minutes=300)
+    plan = scheduler.build_plan(
+        [
+            Task("Appt", duration_minutes=45, priority="high", time="09:00"),
+            Task("Walk", duration_minutes=30, priority="high"),
+            Task("Feed", duration_minutes=15, priority="medium"),
+        ]
+    )
+    assert scheduler.detect_conflicts(plan) == []
+
+
+# --- Persistence (JSON save/load) -------------------------------------------
+def test_json_round_trip_preserves_pets_and_tasks(tmp_path):
+    owner = Owner("Jordan", available_minutes=180, wake_time="07:30")
+    pet = Pet("Biscuit", "dog", "Golden", 4)
+    pet.add_task(
+        Task("Walk", "walk", 30, "high", recurrence="daily", time="08:00", due_date=date(2026, 1, 1))
+    )
+    owner.add_pet(pet)
+
+    path = tmp_path / "data.json"
+    owner.save_to_json(path)
+    loaded = Owner.load_from_json(path)
+
+    assert loaded.name == "Jordan"
+    assert loaded.wake_time == "07:30"
+    assert [p.name for p in loaded.pets] == ["Biscuit"]
+    task = loaded.pets[0].tasks[0]
+    assert task.title == "Walk"
+    assert task.time == "08:00"
+    assert task.recurrence == "daily"
+    assert task.due_date == date(2026, 1, 1)   # date survives the round trip
+
+
 # --- Edge case: no tasks ----------------------------------------------------
 def test_plan_for_owner_with_no_tasks_is_empty():
     owner = Owner("Jordan")

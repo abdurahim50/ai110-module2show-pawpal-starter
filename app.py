@@ -1,6 +1,10 @@
+import os
+
 import streamlit as st
 
 from pawpal_system import Owner, Pet, Task, Scheduler
+
+DATA_FILE = "data.json"
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 st.title("🐾 PawPal+")
@@ -24,6 +28,15 @@ with col_b:
         "Available minutes today", min_value=15, max_value=1440,
         value=owner.available_minutes, step=15,
     )
+
+# --- Persistence: remember pets & tasks between runs (data.json) ------------
+save_col, load_col = st.columns(2)
+if save_col.button("💾 Save profile"):
+    owner.save_to_json(DATA_FILE)
+    st.success(f"Saved {len(owner.pets)} pet(s) and {len(owner.all_tasks())} task(s) to {DATA_FILE}.")
+if load_col.button("📂 Load profile", disabled=not os.path.exists(DATA_FILE)):
+    st.session_state.owner = Owner.load_from_json(DATA_FILE)
+    st.rerun()
 
 st.divider()
 

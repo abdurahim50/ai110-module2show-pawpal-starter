@@ -9,6 +9,10 @@ classDiagram
         +add_pet(pet Pet) None
         +get_pet(name str) Pet
         +all_tasks() list~Task~
+        +to_dict() dict
+        +from_dict(data dict) Owner
+        +save_to_json(path str) None
+        +load_from_json(path str) Owner
     }
 
     class Pet {
@@ -20,6 +24,8 @@ classDiagram
         +add_task(task Task) None
         +remove_task(title str) None
         +complete_task(task Task) Task
+        +to_dict() dict
+        +from_dict(data dict) Pet
     }
 
     class Task {
@@ -34,6 +40,8 @@ classDiagram
         +priority_score() int
         +mark_complete() None
         +next_occurrence() Task
+        +to_dict() dict
+        +from_dict(data dict) Task
     }
 
     class Scheduler {

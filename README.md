@@ -32,6 +32,13 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+### Running
+
+```bash
+streamlit run app.py   # launch the interactive web UI
+python main.py         # run the CLI demo of the logic layer
+```
+
 ### Suggested workflow
 
 1. Read the scenario carefully and identify requirements and edge cases.
@@ -49,12 +56,14 @@ Running the CLI demo (`python main.py`) produces:
 ```
 (.venv) yongh@cyberOps:~/code/codepath/ai110-module2show-pawpal-starter$ python main.py
 Today's Schedule for Jordan (sorted by time)
-============================================
-08:00  Morning walk       [high]
-08:00  Feeding            [high]
-12:00  Enrichment play    [medium]
-18:00  Evening walk       [medium]
-============================================
+╭────────┬───────────────────┬────────────╮
+│ Time   │ Task              │ Priority   │
+├────────┼───────────────────┼────────────┤
+│ 08:00  │ 🚶 Morning walk    │ 🔴 high     │
+│ 08:00  │ 🍽️ Feeding        │ 🔴 high     │
+│ 12:00  │ 🧸 Enrichment play │ 🟡 medium   │
+│ 18:00  │ 🚶 Evening walk    │ 🟡 medium   │
+╰────────┴───────────────────┴────────────╯
 
 Pending tasks: 4
 Biscuit's tasks: ['Evening walk', 'Morning walk']
@@ -67,12 +76,16 @@ Next free slot for a 45-min grooming session:
 
 Completing Biscuit's 'Morning walk' (daily)...
   done=True; next occurrence due 2026-07-06
+
+Persistence check (data.json):
+  saved and reloaded 2 pets, 5 tasks.
 ```
 
-The demo adds tasks out of order to show `sort_by_time()`, filters by status
-and pet, flags the 08:00 clash, finds the earliest free slot for a new 45-minute
-task via `find_next_slot()`, and shows a completed daily task spawning its next
-occurrence.
+The demo adds tasks out of order to show `sort_by_time()` (rendered as a
+`tabulate` grid with category/priority emoji), filters by status and pet, flags
+the 08:00 clash, finds the earliest free slot for a new 45-minute task via
+`find_next_slot()`, shows a completed daily task spawning its next occurrence,
+and round-trips the whole profile through `data.json` to prove persistence.
 
 ## 🧪 Testing PawPal+
 
@@ -84,7 +97,7 @@ python -m pytest
 pytest --cov
 ```
 
-The suite (`tests/test_pawpal.py`, 14 tests) covers:
+The suite (`tests/test_pawpal.py`, 17 tests) covers:
 
 - **Core behavior** — marking a task complete, adding tasks to a pet.
 - **Sorting** — `sort_by_time()` returns tasks in chronological order; `build_plan()` places high-priority tasks first.
@@ -92,6 +105,8 @@ The suite (`tests/test_pawpal.py`, 14 tests) covers:
 - **Recurrence** — completing a daily task creates the next day's instance; one-off tasks create nothing.
 - **Conflict detection** — duplicate times are flagged, unique times are not.
 - **Next available slot** — `find_next_slot()` returns `day_start` for an empty plan, finds the gap between fixed appointments, and returns `None` when the day is full.
+- **Time-blocking** — a flexible task is placed *after* a fixed appointment (no overlap), and a built plan is conflict-free.
+- **Persistence** — an owner saved to JSON and reloaded preserves pets, tasks, times, recurrence, and `due_date`.
 - **Edge case** — an owner/pet with no tasks yields an empty plan.
 
 Successful run:
@@ -102,16 +117,17 @@ Successful run:
 platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
 rootdir: /home/yongh/code/codepath/ai110-module2show-pawpal-starter
 plugins: anyio-4.14.1
-collected 14 items
+collected 17 items
 
-tests/test_pawpal.py ..............                                                                                                     [100%]
+tests/test_pawpal.py .................                                                                                                  [100%]
 
-============================================================= 14 passed in 0.03s =============================================================
+============================================================= 17 passed in 0.03s =============================================================
 ```
 
-**Confidence level: ★★★★☆ (4/5)** — every core behavior and the main edge cases
-are covered and passing. Held back one star because the suite does not yet test
-duration-overlap conflicts or invalid input (e.g., a malformed `HH:MM` time).
+**Confidence level: ★★★★☆ (4/5)** — every core behavior, the main edge cases,
+time-blocking, and JSON persistence are covered and passing. Held back one star
+because the suite does not yet test invalid input (e.g., a malformed `HH:MM`
+time, which currently reaches `_to_minutes()` unguarded).
 
 ## 📐 Smarter Scheduling
 
@@ -122,6 +138,53 @@ duration-overlap conflicts or invalid input (e.g., a malformed `HH:MM` time).
 | Conflict handling | `Scheduler.find_time_conflicts()`, `Scheduler.detect_conflicts()` | `find_time_conflicts` returns warning strings for exact same-time tasks; `detect_conflicts` finds duration overlaps in a built plan. |
 | Recurring tasks | `Task.next_occurrence()`, `Pet.complete_task()` | Completing a `daily`/`weekly` task auto-creates the next instance with `due_date` advanced via `timedelta`. |
 | Next available slot | `Scheduler.find_next_slot()` | Scans the day window for the earliest free gap long enough to hold a new flexible task, skipping around fixed appointments; returns `None` when the day is full. |
+| Time-blocking | `Scheduler.build_plan()` | Reserves fixed-time appointments first, then slots flexible tasks (highest priority first) into free gaps via `find_next_slot`, so a flexible task never overlaps an appointment. |
+
+## 🌟 Stretch Features
+
+### Advanced algorithm — next available slot (Agent Mode)
+
+`Scheduler.find_next_slot(plan, duration_minutes)` scans the day window for the
+earliest free gap that can hold a new flexible task, skipping around fixed
+appointments. See the **Agent Workflow** section of `ai_interactions.md` for the
+files modified, the task given to the agent, and the manual verification done.
+
+### Advanced scheduling — time-blocking
+
+`build_plan()` reserves fixed-time appointments first, then time-blocks flexible
+tasks (highest priority first) into the earliest free gaps, so a flexible task
+never overlaps an appointment. A high-priority `Walk` and a `Play` slot in
+*after* an 08:00–09:00 vet visit rather than colliding with it:
+
+```
+08:00-09:00  Vet visit  (high)
+09:00-09:30  Walk  (high)
+09:30-10:00  Play  (medium)
+conflicts: []
+```
+
+### Data persistence (JSON)
+
+PawPal+ remembers pets and tasks between runs via `data.json`.
+
+- **Workflow:** `Owner.save_to_json(path)` serializes the owner, pets, and tasks
+  (dates stored as ISO strings) to JSON; `Owner.load_from_json(path)` rebuilds
+  the full object graph. In the Streamlit app, the **💾 Save profile** and
+  **📂 Load profile** buttons call these; the CLI demo saves then reloads to
+  confirm the round trip.
+- **Files modified:** `pawpal_system.py` (added `to_dict`/`from_dict` on `Task`,
+  `Pet`, `Owner`, plus `save_to_json`/`load_from_json`), `app.py` (Save/Load
+  buttons), `main.py` (persistence round-trip demo), `.gitignore` (ignores the
+  runtime `data.json`).
+
+### Professional output formatting
+
+The CLI renders the schedule as a bordered grid using the **`tabulate`** library
+(`tablefmt="rounded_outline"`), with category emoji (`🚶 walk`, `🍽️ feeding`,
+`💊 meds`, `🏥 appointment`, `🧸 enrichment`, `✂️ grooming`) and priority badges
+(`🔴 high`, `🟡 medium`, `🟢 low`) built from the `CATEGORY_EMOJI` / `PRIORITY_EMOJI`
+maps and the `_emoji()` helper in `main.py`. `tabulate` is pinned in
+`requirements.txt`.
 
 ## 📸 Demo Walkthrough
 
@@ -179,12 +242,14 @@ The same logic layer runs headless via `python main.py`:
 ```
 (.venv) yongh@cyberOps:~/code/codepath/ai110-module2show-pawpal-starter$ python main.py
 Today's Schedule for Jordan (sorted by time)
-============================================
-08:00  Morning walk       [high]
-08:00  Feeding            [high]
-12:00  Enrichment play    [medium]
-18:00  Evening walk       [medium]
-============================================
+╭────────┬───────────────────┬────────────╮
+│ Time   │ Task              │ Priority   │
+├────────┼───────────────────┼────────────┤
+│ 08:00  │ 🚶 Morning walk    │ 🔴 high     │
+│ 08:00  │ 🍽️ Feeding        │ 🔴 high     │
+│ 12:00  │ 🧸 Enrichment play │ 🟡 medium   │
+│ 18:00  │ 🚶 Evening walk    │ 🟡 medium   │
+╰────────┴───────────────────┴────────────╯
 
 Pending tasks: 4
 Biscuit's tasks: ['Evening walk', 'Morning walk']
@@ -197,6 +262,9 @@ Next free slot for a 45-min grooming session:
 
 Completing Biscuit's 'Morning walk' (daily)...
   done=True; next occurrence due 2026-07-06
+
+Persistence check (data.json):
+  saved and reloaded 2 pets, 5 tasks.
 ```
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->

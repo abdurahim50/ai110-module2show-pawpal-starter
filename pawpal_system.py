@@ -7,6 +7,7 @@ filtering, recurring tasks, and conflict detection.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
@@ -53,6 +54,34 @@ class Task:
         base = self.due_date or date.today()
         return replace(self, due_date=base + step, done=False)
 
+    def to_dict(self) -> dict:
+        """Serialize this task to a JSON-safe dict (dates become ISO strings)."""
+        return {
+            "title": self.title,
+            "category": self.category,
+            "duration_minutes": self.duration_minutes,
+            "priority": self.priority,
+            "recurrence": self.recurrence,
+            "time": self.time,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "done": self.done,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Rebuild a Task from a dict produced by `to_dict()`."""
+        due = data.get("due_date")
+        return cls(
+            title=data["title"],
+            category=data.get("category", "general"),
+            duration_minutes=data.get("duration_minutes", 15),
+            priority=data.get("priority", "medium"),
+            recurrence=data.get("recurrence", "none"),
+            time=data.get("time"),
+            due_date=date.fromisoformat(due) if due else None,
+            done=data.get("done", False),
+        )
+
 
 @dataclass
 class Pet:
@@ -80,6 +109,28 @@ class Pet:
             self.add_task(nxt)
         return nxt
 
+    def to_dict(self) -> dict:
+        """Serialize this pet (and its tasks) to a JSON-safe dict."""
+        return {
+            "name": self.name,
+            "species": self.species,
+            "breed": self.breed,
+            "age": self.age,
+            "tasks": [t.to_dict() for t in self.tasks],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Pet":
+        """Rebuild a Pet (and its tasks) from a dict produced by `to_dict()`."""
+        pet = cls(
+            name=data["name"],
+            species=data.get("species", "dog"),
+            breed=data.get("breed", ""),
+            age=data.get("age", 0),
+        )
+        pet.tasks = [Task.from_dict(t) for t in data.get("tasks", [])]
+        return pet
+
 
 @dataclass
 class Owner:
@@ -101,6 +152,37 @@ class Owner:
     def all_tasks(self) -> list[Task]:
         """Collect every task across all of this owner's pets."""
         return [task for pet in self.pets for task in pet.tasks]
+
+    def to_dict(self) -> dict:
+        """Serialize the whole owner profile (pets, tasks, prefs) to a dict."""
+        return {
+            "name": self.name,
+            "available_minutes": self.available_minutes,
+            "wake_time": self.wake_time,
+            "pets": [pet.to_dict() for pet in self.pets],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Owner":
+        """Rebuild an Owner (with pets and tasks) from a `to_dict()` payload."""
+        owner = cls(
+            name=data["name"],
+            available_minutes=data.get("available_minutes", 240),
+            wake_time=data.get("wake_time", "08:00"),
+        )
+        owner.pets = [Pet.from_dict(p) for p in data.get("pets", [])]
+        return owner
+
+    def save_to_json(self, path: str = "data.json") -> None:
+        """Persist this owner's pets and tasks to a JSON file for the next run."""
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(self.to_dict(), fh, indent=2)
+
+    @classmethod
+    def load_from_json(cls, path: str = "data.json") -> "Owner":
+        """Load an owner (with pets and tasks) previously saved by `save_to_json`."""
+        with open(path, "r", encoding="utf-8") as fh:
+            return cls.from_dict(json.load(fh))
 
 
 class Scheduler:
@@ -146,28 +228,48 @@ class Scheduler:
             if len(titles) > 1
         ]
 
+    def _place(self, plan: list[dict], task: Task, start: int) -> None:
+        """Append a plan entry for `task` starting at `start` minutes past midnight."""
+        end = start + task.duration_minutes
+        plan.append(
+            {
+                "task": task,
+                "start": _to_hhmm(start),
+                "end": _to_hhmm(end),
+                "start_min": start,
+                "end_min": end,
+            }
+        )
+
     def build_plan(self, tasks: list[Task]) -> list[dict]:
-        """Pack unfinished tasks into the day, honoring fixed times and budget."""
-        ordered = self.sort_tasks([t for t in tasks if not t.done])
+        """Build a time-blocked day plan honoring fixed times, priority, and budget.
+
+        Fixed-time tasks are reserved first as immovable appointments. Flexible
+        (untimed) tasks are then slotted, highest priority first, into the
+        earliest free gap via ``find_next_slot`` — so a flexible task never
+        overlaps an appointment. Tasks that can't fit in the remaining time
+        budget or the remaining open gaps are skipped.
+        """
+        pending = [t for t in tasks if not t.done]
+        fixed = self.sort_by_time([t for t in pending if t.time])
+        flexible = self.sort_tasks([t for t in pending if not t.time])
+
         plan: list[dict] = []
-        cursor = _to_minutes(self.day_start)
         used = 0
-        for task in ordered:
-            if used + task.duration_minutes > self.available_minutes:
-                continue  # out of time — skip this (lower-priority) task
-            start = _to_minutes(task.time) if task.time else cursor
-            end = start + task.duration_minutes
-            plan.append(
-                {
-                    "task": task,
-                    "start": _to_hhmm(start),
-                    "end": _to_hhmm(end),
-                    "start_min": start,
-                    "end_min": end,
-                }
-            )
+        # 1) Reserve fixed appointments at their exact times.
+        for task in fixed:
+            self._place(plan, task, _to_minutes(task.time))
             used += task.duration_minutes
-            cursor = max(cursor, end)
+        # 2) Time-block flexible tasks into free gaps, highest priority first.
+        for task in flexible:
+            if used + task.duration_minutes > self.available_minutes:
+                continue  # out of daily time budget — skip this task
+            slot = self.find_next_slot(plan, task.duration_minutes)
+            if slot is None:
+                continue  # no open gap large enough — skip to avoid overlap
+            self._place(plan, task, _to_minutes(slot))
+            used += task.duration_minutes
+
         plan.sort(key=lambda entry: entry["start_min"])
         return plan
 
