@@ -74,18 +74,39 @@ next occurrence.
 
 ```bash
 # Run the full test suite:
-pytest
+python -m pytest
 
 # Run with coverage:
 pytest --cov
 ```
 
-Sample test output:
+The suite (`tests/test_pawpal.py`, 11 tests) covers:
+
+- **Core behavior** — marking a task complete, adding tasks to a pet.
+- **Sorting** — `sort_by_time()` returns tasks in chronological order; `build_plan()` places high-priority tasks first.
+- **Filtering** — by completion status and by pet name.
+- **Recurrence** — completing a daily task creates the next day's instance; one-off tasks create nothing.
+- **Conflict detection** — duplicate times are flagged, unique times are not.
+- **Edge case** — an owner/pet with no tasks yields an empty plan.
+
+Successful run:
 
 ```
-...                                                                      [100%]
-3 passed in 0.01s
+(.venv) yongh@cyberOps:~/code/codepath/ai110-module2show-pawpal-starter$ python -m pytest
+============================================================ test session starts =============================================================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/yongh/code/codepath/ai110-module2show-pawpal-starter
+plugins: anyio-4.14.1
+collected 11 items
+
+tests/test_pawpal.py ...........                                                                                                       [100%]
+
+============================================================= 11 passed in 0.01s =============================================================
 ```
+
+**Confidence level: ★★★★☆ (4/5)** — every core behavior and the main edge cases
+are covered and passing. Held back one star because the suite does not yet test
+duration-overlap conflicts or invalid input (e.g., a malformed `HH:MM` time).
 
 ## 📐 Smarter Scheduling
 
